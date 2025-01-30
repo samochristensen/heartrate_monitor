@@ -1,5 +1,3 @@
-
-
 // Include necessary libraries for communication and for the MAX30105 sensor
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
@@ -31,6 +29,7 @@ float beatsPerMinute2; // Calculated heart rate in beats per minute
 int beatAvg2 = 0; // Average heart rate after processing multiple readings
 
 int lastDisplayedBPM1 = 0, lastDisplayedBPM2 = 0; // Stores last displayed BPM to avoid redundant updates
+
 void TCA9548A(uint8_t bus)
 {
   Wire.beginTransmission(0x70); //it's address
@@ -117,15 +116,11 @@ void setup() {
   delay(100);
 
   //start LCD and print message
-  TCA9548A(7);
   lcd1.init();
   lcd1.backlight();
   lcd1.setCursor(0, 0);
   lcd1.print("Place finger");
 
-  delay(100);
-
-  TCA9548A(6);
   lcd2.init();
   lcd2.backlight();
   lcd2.setCursor(0, 0);
