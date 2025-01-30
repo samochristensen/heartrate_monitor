@@ -1,62 +1,53 @@
-// Include necessary libraries for communication and for the MAX30105 sensor
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include "MAX30105.h"
 #include "heartRate.h"
- 
-// Create instances of the MAX30105 class to interact with the sensor
+
 MAX30105 particleSensor1;
 MAX30105 particleSensor2;
 
-//Initialize LCDs
 LiquidCrystal_I2C lcd1(0x27, 16, 2);
 LiquidCrystal_I2C lcd2(0x26, 16, 2);
 
-const byte RATE_SIZE = 4; // Increase this for more averaging. 4 is a good starting point.
+const byte RATE_SIZE = 4;
 
-byte rates1[RATE_SIZE]; // Array to store heart rate readings for averaging
-byte rateSpot1 = 0; // Index for inserting the next heart rate reading into the array
-long lastBeat1 = 0; // Timestamp of the last detected beat, used to calculate BPM
+byte rates1[RATE_SIZE];
+byte rateSpot1 = 0;
+long lastBeat1 = 0;
 long delta1;
-float beatsPerMinute1; // Calculated heart rate in beats per minute
-int beatAvg1 = 0; // Average heart rate after processing multiple readings
+float beatsPerMinute1;
+int beatAvg1 = 0;
 
-byte rates2[RATE_SIZE]; // Array to store heart rate readings for averaging
-byte rateSpot2 = 0; // Index for inserting the next heart rate reading into the array
-long lastBeat2 = 0; // Timestamp of the last detected beat, used to calculate BPM
+byte rates2[RATE_SIZE];
+byte rateSpot2 = 0;
+long lastBeat2 = 0;
 long delta2;
-float beatsPerMinute2; // Calculated heart rate in beats per minute
-int beatAvg2 = 0; // Average heart rate after processing multiple readings
+float beatsPerMinute2;
+int beatAvg2 = 0;
 
-int lastDisplayedBPM1 = 0, lastDisplayedBPM2 = 0; // Stores last displayed BPM to avoid redundant updates
+int lastDisplayedBPM1 = 0, lastDisplayedBPM2 = 0;
 
-void TCA9548A(uint8_t bus)
-{
-  Wire.beginTransmission(0x70); //it's address
+void TCA9548A(uint8_t bus) {
+  Wire.beginTransmission(0x70);
   Wire.write(1 << bus);
   Wire.endTransmission();
-
   delay(10);
 }
 
-void initializeSensor(MAX30105 &particleSensor) 
-{ 
-  // Attempt to initialize the MAX30105 sensor. Check for a successful connection and report.
-  if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) { // Start communication using fast I2C speed
-    Serial.println("MAX30102 was not found. Please check wiring/power. ");
-    while (1); // Infinite loop to halt further execution if sensor is not found
+void initializeSensor(MAX30105 &particleSensor) { 
+  if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) {
+    Serial.println("MAX30102 was not found. Please check wiring/power.");
+    while (1);
   }
   Serial.println("sensor ready");
- 
-  particleSensor.setup(); // Configure sensor with default settings for heart rate monitoring
-  particleSensor.setPulseAmplitudeRed(0x1F); // Set the red LED pulse amplitude (intensity) to a low value as an indicator
-  particleSensor.setPulseAmplitudeGreen(0); // Turn off the green LED as it's not used here
+
+  particleSensor.setup();
+  particleSensor.setPulseAmplitudeRed(0x1F);
+  particleSensor.setPulseAmplitudeGreen(0);
 }
 
-// Function to update LCD only if the BPM value has changed
-void updateLCD(LiquidCrystal_I2C &lcd, int beatAvg, int &lastDisplayedBPM)
-{
-  if (beatAvg != lastDisplayedBPM) { // Update LCD only if BPM has changed
+void updateLCD(LiquidCrystal_I2C &lcd, int beatAvg, int &lastDisplayedBPM) {
+  if (beatAvg != lastDisplayedBPM) {
     lcd.clear();
     lcd.print("BPM: ");
     lcd.print(beatAvg);
@@ -64,28 +55,24 @@ void updateLCD(LiquidCrystal_I2C &lcd, int beatAvg, int &lastDisplayedBPM)
   }
 }
 
-// Function to get heart rate readings
 void getHeartRate(MAX30105 &particleSensor, long &delta, long &lastBeat, 
           float &beatsPerMinute, byte rates[], byte &rateSpot, int &beatAvg, 
-          LiquidCrystal_I2C &lcd, int &lastDisplayedBPM)
-{
-  long irValue = particleSensor.getIR(); // Read the infrared value from the sensor
-  //Serial.println(irValue);
-  if (irValue < 50000) return; // Skip if no finger detected
- 
-  if (checkForBeat(irValue) == true) { // Check if a heart beat is detected
-    delta = millis() - lastBeat; // Calculate the time between the current and last beat
-    lastBeat = millis(); // Update lastBeat to the current time
- 
-    beatsPerMinute = 60 / (delta / 1000.0); // Calculate BPM
- 
-    // Ensure BPM is within a reasonable range before updating the rates array
+          LiquidCrystal_I2C &lcd, int &lastDisplayedBPM) {
+  
+  long irValue = particleSensor.getIR();
+  if (irValue < 50000) return;
+
+  if (checkForBeat(irValue)) {
+    delta = millis() - lastBeat;
+    lastBeat = millis();
+    beatsPerMinute = 60 / (delta / 1000.0);
+
     if (beatsPerMinute < 255 && beatsPerMinute > 20) {
-      rates[rateSpot++] = (byte)beatsPerMinute; // Store this reading in the rates array
-      rateSpot %= RATE_SIZE; // Wrap the rateSpot index to keep it within the bounds of the rates array
- 
-      beatAvg = 0; // Compute the average of stored heart rates to smooth out the BPM
-      for (byte x = 0 ; x < RATE_SIZE ; x++)
+      rates[rateSpot++] = (byte)beatsPerMinute;
+      rateSpot %= RATE_SIZE;
+
+      beatAvg = 0;
+      for (byte x = 0; x < RATE_SIZE; x++)
         beatAvg += rates[x];
       beatAvg /= RATE_SIZE;
 
@@ -97,25 +84,18 @@ void getHeartRate(MAX30105 &particleSensor, long &delta, long &lastBeat,
   }
 }
 
- 
 void setup() {
-  Serial.begin(115200); // Start serial communication at 115200 baud rate
-
-  //Start Wire Library I2C
+  Serial.begin(115200);
   Wire.begin();
- 
-  //initialize sensors
+
   TCA9548A(1);
   initializeSensor(particleSensor1);
-
   delay(100);
 
   TCA9548A(2);
   initializeSensor(particleSensor2);
-
   delay(100);
 
-  //start LCD and print message
   lcd1.init();
   lcd1.backlight();
   lcd1.setCursor(0, 0);
@@ -128,9 +108,8 @@ void setup() {
 
   delay(100);
 }
- 
-void loop() {
 
+void loop() {
   TCA9548A(1);
   delay(5);
   for (int i = 0; i < 10; i++) {  
