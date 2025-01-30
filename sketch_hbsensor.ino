@@ -12,7 +12,7 @@ MAX30105 particleSensor2;
 
 //Initialize LCDs
 LiquidCrystal_I2C lcd1(0x27, 16, 2);
-LiquidCrystal_I2C lcd2(0x27, 16, 2);
+LiquidCrystal_I2C lcd2(0x26, 16, 2);
 
 const byte RATE_SIZE = 4; // Increase this for more averaging. 4 is a good starting point.
 
@@ -30,6 +30,7 @@ long delta2;
 float beatsPerMinute2; // Calculated heart rate in beats per minute
 int beatAvg2 = 0; // Average heart rate after processing multiple readings
 
+int lastDisplayedBPM1 = 0, lastDisplayedBPM2 = 0; // Stores last displayed BPM to avoid redundant updates
 void TCA9548A(uint8_t bus)
 {
   Wire.beginTransmission(0x70); //it's address
@@ -53,11 +54,25 @@ void initializeSensor(MAX30105 &particleSensor)
   particleSensor.setPulseAmplitudeGreen(0); // Turn off the green LED as it's not used here
 }
 
+// Function to update LCD only if the BPM value has changed
+void updateLCD(LiquidCrystal_I2C &lcd, int beatAvg, int &lastDisplayedBPM)
+{
+  if (beatAvg != lastDisplayedBPM) { // Update LCD only if BPM has changed
+    lcd.clear();
+    lcd.print("BPM: ");
+    lcd.print(beatAvg);
+    lastDisplayedBPM = beatAvg;
+  }
+}
+
+// Function to get heart rate readings
 void getHeartRate(MAX30105 &particleSensor, long &delta, long &lastBeat, 
-          float &beatsPerMinute, byte rates[], byte &rateSpot, int &beatAvg, LiquidCrystal_I2C &lcd, bool isOne)
+          float &beatsPerMinute, byte rates[], byte &rateSpot, int &beatAvg, 
+          LiquidCrystal_I2C &lcd, int &lastDisplayedBPM)
 {
   long irValue = particleSensor.getIR(); // Read the infrared value from the sensor
   //Serial.println(irValue);
+  if (irValue < 50000) return; // Skip if no finger detected
  
   if (checkForBeat(irValue) == true) { // Check if a heart beat is detected
     delta = millis() - lastBeat; // Calculate the time between the current and last beat
@@ -75,22 +90,14 @@ void getHeartRate(MAX30105 &particleSensor, long &delta, long &lastBeat,
         beatAvg += rates[x];
       beatAvg /= RATE_SIZE;
 
-      // Output the averaged BPM to the serial monitor
-      Serial.print("Avg BPM:");
-      Serial.print(beatAvg);
-      Serial.println();
-      //display on LCD
-      if (isOne) {
-        TCA9548A(7);
-      } else {
-        TCA9548A(6);
-      }
-      lcd.clear();
-      lcd.print("BPM: ");
-      lcd.print(beatAvg);
+      Serial.print("Avg BPM: ");
+      Serial.println(beatAvg);
+
+      updateLCD(lcd, beatAvg, lastDisplayedBPM);
     }
   }
 }
+
  
 void setup() {
   Serial.begin(115200); // Start serial communication at 115200 baud rate
@@ -130,24 +137,16 @@ void setup() {
 void loop() {
 
   TCA9548A(1);
-  getHeartRate(particleSensor1, delta1, lastBeat1, beatsPerMinute1, rates1, rateSpot1, beatAvg1, lcd1, true);
+  delay(5);
+  for (int i = 0; i < 10; i++) {  
+    getHeartRate(particleSensor1, delta1, lastBeat1, beatsPerMinute1, rates1, rateSpot1, beatAvg1, lcd1, lastDisplayedBPM1);
+  }
 
   TCA9548A(2);
-  getHeartRate(particleSensor2, delta2, lastBeat2, beatsPerMinute2, rates2, rateSpot2, beatAvg2, lcd2, false);
+  delay(5);
+  for (int i = 0; i < 10; i++) {  
+    getHeartRate(particleSensor2, delta2, lastBeat2, beatsPerMinute2, rates2, rateSpot2, beatAvg2, lcd2, lastDisplayedBPM2);
+  }
 
-  //     //display on LCD
-  //     // lcd.clear();  // Clear the LCD screen (optional)
-  //     // lcd.setCursor(0, 0);  // Set the cursor to the first row
-  //     // lcd.print("BPM: ");
-  //     // lcd.print(beatAvg);  // Display the average heart rate on the screen
-  //   }
-    
-  // }
- 
-  // Check if the sensor reading suggests that no finger is placed on the sensor
-  // if (irValue < 50000)
-  //   Serial.print(" No finger?");
- 
-  delay(25);
-  
+  delay(10);
 }
